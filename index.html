@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0b140b">
+<meta name="mobile-web-app-capable" content="yes">
+<title>TrailAlert · Maurienne</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@700;800&display=swap');
+:root{
+  --bg:#0b140b;--surface:#131f12;--surface2:#1a2b19;--border:#243823;
+  --accent:#7fff5a;--accent-glow:rgba(127,255,90,0.15);
+  --text:#e8f0e7;--muted:#7a9478;
+  --danger:#ff5a5a;--warn:#ffb347;--ok:#7fff5a;
+  --r:14px;--rs:8px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;font-family:'Space Grotesk',system-ui,sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+
+/* SPLASH */
+#splash{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .6s,transform .6s}
+#splash.hide{opacity:0;transform:scale(1.04);pointer-events:none}
+.s-icon{font-size:60px;animation:pulse 1.5s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.s-title{font-family:'Syne',system-ui;font-size:34px;font-weight:800;letter-spacing:-1px;color:var(--accent)}
+.s-sub{color:var(--muted);font-size:13px;letter-spacing:2px;text-transform:uppercase}
+.s-bar{width:160px;height:3px;background:var(--surface2);border-radius:2px;overflow:hidden;margin-top:8px}
+.s-fill{height:100%;width:0;background:var(--accent);border-radius:2px;animation:fillbar 2s ease forwards}
+@keyframes fillbar{to{width:100%}}
+
+/* LAYOUT */
+#app{position:fixed;inset:0;display:flex;flex-direction:column}
+header{z-index:1000;background:var(--surface);border-bottom:1px solid var(--border);padding:11px 15px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-mark{width:36px;height:36px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.logo-text{font-family:'Syne',system-ui;font-size:18px;font-weight:800;letter-spacing:-.5px;color:var(--accent)}
+.logo-zone{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+.live-badge{display:flex;align-items:center;gap:5px;background:rgba(127,255,90,.1);border:1px solid rgba(127,255,90,.3);border-radius:20px;padding:4px 10px;font-size:11px;color:var(--accent);font-weight:600}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:blink 1s ease infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+
+/* CONTENT */
+#content{flex:1;overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:0}
+
+/* MAP PANEL */
+#panel-map{flex:1;position:relative;display:flex;flex-direction:column;min-height:0}
+#panel-map.hidden{display:none}
+#map{flex:1;min-height:0;z-index:1}
+
+/* Leaflet dark override */
+.leaflet-container{background:#0d1f10 !important}
+.leaflet-tile{filter:brightness(.55) saturate(.5) hue-rotate(80deg) contrast(1.1)}
+.leaflet-control-zoom a{background:var(--surface)!important;color:var(--accent)!important;border-color:var(--border)!important}
+.leaflet-control-attribution{display:none!important}
+
+/* MAP OVERLAYS */
+.map-legend{position:absolute;top:10px;left:10px;z-index:500;background:rgba(11,20,11,.93);border:1px solid var(--border);border-radius:var(--rs);padding:8px 10px;backdrop-filter:blur(8px)}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);margin-bottom:3px}
+.legend-item:last-child{margin-bottom:0}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+.mode-toggle{position:absolute;top:10px;right:10px;z-index:500;display:flex;gap:4px}
+.mode-btn{background:rgba(11,20,11,.93);border:1px solid var(--border);border-radius:var(--rs);padding:6px 9px;color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;transition:all .15s;backdrop-filter:blur(8px);font-family:inherit}
+.mode-btn.active{background:var(--accent-glow);border-color:var(--accent);color:var(--accent)}
+
+#fab{position:absolute;bottom:62px;right:14px;z-index:500;width:56px;height:56px;border-radius:50%;background:var(--accent);border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:26px;box-shadow:0 4px 24px rgba(127,255,90,.45);transition:transform .15s}
+#fab:active{transform:scale(.92)}
+.fab-label{position:absolute;bottom:70px;right:78px;z-index:500;background:var(--surface);border:1px solid var(--border);border-radius:var(--rs);padding:5px 10px;font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;pointer-events:none}
+
+.stats-bar{display:flex;background:rgba(11,20,11,.97);border-top:1px solid var(--border);flex-shrink:0}
+.stat-item{flex:1;text-align:center;padding:7px 0;border-right:1px solid var(--border)}
+.stat-item:last-child{border-right:none}
+.stat-num{font-family:'Syne',system-ui;font-size:17px;font-weight:800;color:var(--accent)}
+.stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+
+/* BOTTOM NAV */
+nav{z-index:1000;background:var(--surface);border-top:1px solid var(--border);display:flex;flex-shrink:0}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:9px 0;cursor:pointer;border:none;background:none;color:var(--muted);font-family:inherit;font-size:10px;font-weight:500;transition:color .15s}
+.tab.active{color:var(--accent)}
+.tab-icon{font-size:19px}
+.tab-wrap{position:relative;display:inline-flex}
+.badge{position:absolute;top:-4px;right:-10px;background:var(--danger);color:#fff;border-radius:10px;font-size:9px;font-weight:700;padding:1px 5px;min-width:16px;text-align:center}
+
+/* LEAFLET POPUP CUSTOM */
+.leaflet-popup-content-wrapper{
+  background:var(--surface)!important;border:1px solid var(--border)!important;
+  border-radius:var(--r)!important;box-shadow:0 8px 32px rgba(0,0,0,.6)!important;
+  color:var(--text)!important;padding:0!important;
+}
+.leaflet-popup-tip-container{display:none}
+.leaflet-popup-close-button{
+  color:var(--muted)!important;font-size:18px!important;
+  top:10px!important;right:12px!important;
+  width:28px!important;height:28px!important;
+  display:flex!important;align-items:center!important;justify-content:center!important;
+  background:var(--surface2)!important;border-radius:50%!important;
+  line-height:1!important;padding:0!important;
+  z-index:10!important;
+}
+.leaflet-popup-content{margin:0!important;font-family:'Space Grotesk',system-ui!important}
+.popup-inner{padding:14px 40px 14px 14px}
+.pu-icon{font-size:28px;display:block;margin-bottom:5px}
+.pu-type{font-weight:700;font-size:14px;margin-bottom:3px}
+.pu-note{font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.45}
+.pu-foot{font-size:10px;color:#4a6449;display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.pu-actions{display:flex;gap:6px}
+.pu-vote{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.pu-vote.ok{border-color:var(--ok);color:var(--ok)}
+.pu-vote.no{border-color:var(--danger);color:var(--danger)}
+
+/* MODALS */
+.modal-overlay{position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,.72);backdrop-filter:blur(4px);display:flex;align-items:flex-end;opacity:0;pointer-events:none;transition:opacity .25s}
+.modal-overlay.open{opacity:1;pointer-events:all}
+.modal{width:100%;background:var(--surface);border-radius:20px 20px 0 0;border-top:1px solid var(--border);transform:translateY(100%);transition:transform .3s cubic-bezier(.34,1.56,.64,1);max-height:88vh;overflow-y:auto;padding-bottom:env(safe-area-inset-bottom,16px)}
+.modal-overlay.open .modal{transform:translateY(0)}
+.modal-handle{width:36px;height:4px;background:var(--border);border-radius:2px;margin:12px auto 0}
+.modal-header{padding:14px 18px 0;display:flex;justify-content:space-between;align-items:center}
+.modal-title{font-family:'Syne',system-ui;font-size:19px;font-weight:800}
+.modal-close{width:30px;height:30px;border-radius:50%;background:var(--surface2);border:none;color:var(--muted);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit;flex-shrink:0}
+.modal-body{padding:14px 18px 20px}
+.input-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;display:block}
+.report-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+.at{background:var(--surface2);border:2px solid transparent;border-radius:var(--r);padding:12px 8px;display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;transition:border-color .15s,background .15s}
+.at:active{transform:scale(.97)}
+.at.sel{border-color:var(--accent);background:var(--accent-glow)}
+.at-icon{font-size:24px}
+.at-name{font-size:12px;font-weight:600;text-align:center}
+.at-desc{font-size:10px;color:var(--muted);text-align:center;line-height:1.3}
+.sev-row{display:flex;gap:8px;margin-bottom:14px}
+.sev-btn{flex:1;padding:9px;border-radius:var(--rs);border:2px solid var(--border);background:var(--surface2);color:var(--muted);font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s}
+.sev-btn.active{color:var(--bg)}
+.sev-l.active{background:var(--ok);border-color:var(--ok)}
+.sev-m.active{background:var(--warn);border-color:var(--warn)}
+.sev-h.active{background:var(--danger);border-color:var(--danger)}
+.mb{margin-bottom:12px}
+textarea,select{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-family:inherit;font-size:14px;padding:10px 12px;outline:none;resize:none;transition:border-color .15s;-webkit-appearance:none;appearance:none}
+textarea:focus,select:focus{border-color:var(--accent)}
+.btn-p{width:100%;padding:15px;background:var(--accent);border:none;border-radius:var(--r);color:var(--bg);font-family:inherit;font-size:15px;font-weight:700;cursor:pointer}
+.btn-p:active{opacity:.9;transform:scale(.99)}
+.btn-s{width:100%;padding:12px;background:transparent;border:1px solid var(--border);border-radius:var(--r);color:var(--muted);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;margin-top:8px}
+
+/* FEED */
+#panel-feed{display:none;flex-direction:column;flex:1;overflow:hidden;min-height:0}
+#panel-feed.active{display:flex}
+.feed-hdr{padding:14px 14px 8px;display:flex;justify-content:space-between;align-items:center;flex-shrink:0}
+.feed-title{font-family:'Syne',system-ui;font-size:19px;font-weight:800}
+.feed-ct{font-size:11px;color:var(--muted)}
+.feed-list{flex:1;overflow-y:auto;padding:0 12px 16px}
+.ac{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px;margin-bottom:9px;position:relative;overflow:hidden;animation:si .3s ease}
+@keyframes si{from{opacity:0;transform:translateY(8px)}}
+.ac::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px}
+.ac.sev-low::before{background:var(--ok)}
+.ac.sev-med::before{background:var(--warn)}
+.ac.sev-high::before{background:var(--danger)}
+.ac-top{display:flex;align-items:center;gap:9px;margin-bottom:7px}
+.ac-icon{font-size:22px;flex-shrink:0}
+.ac-meta{flex:1}
+.ac-type{font-size:13px;font-weight:700}
+.ac-loc{font-size:11px;color:var(--muted);margin-top:1px}
+.ac-time{font-size:10px;color:var(--muted);flex-shrink:0}
+.ac-note{font-size:12px;color:var(--muted);line-height:1.4;margin-bottom:9px}
+.ac-acts{display:flex;gap:6px;align-items:center}
+.vbtn{display:flex;align-items:center;gap:4px;padding:5px 10px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);font-size:11px;font-weight:600;cursor:pointer;font-family:inherit}
+.vbtn.ok{border-color:var(--ok);color:var(--ok)}
+.vbtn.no{border-color:var(--danger);color:var(--danger)}
+.mine-tag{margin-left:auto;background:rgba(127,255,90,.1);border:1px solid rgba(127,255,90,.2);color:var(--accent);border-radius:20px;padding:3px 8px;font-size:10px;font-weight:600}
+
+/* PROFILE */
+#panel-profile{display:none;flex:1;overflow-y:auto;padding:18px}
+#panel-profile.active{display:block}
+.p-hdr{text-align:center;padding:18px 0}
+.avatar{width:70px;height:70px;border-radius:50%;background:var(--surface2);border:2px solid var(--accent);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-size:30px}
+.p-name{font-family:'Syne',system-ui;font-size:21px;font-weight:800;color:var(--accent)}
+.p-rank{font-size:12px;color:var(--muted);margin-top:3px}
+.sg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin:16px 0}
+.sc{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:13px;text-align:center}
+.sc .n{font-family:'Syne',system-ui;font-size:22px;font-weight:800;color:var(--accent)}
+.sc .l{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
+.st{font-family:'Syne',system-ui;font-size:15px;font-weight:800;margin:18px 0 9px}
+.br{display:flex;gap:7px;flex-wrap:wrap}
+.ub{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:6px 11px;font-size:12px}
+.div{height:1px;background:var(--border);margin:14px 0}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:22px 0;line-height:1.6}
+
+/* TOAST */
+#toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(16px);z-index:9000;background:var(--surface2);border:1px solid var(--accent);border-radius:40px;padding:9px 18px;font-size:13px;font-weight:600;color:var(--accent);opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ADD TRAIL MODAL */
+.trail-info{background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);padding:12px;font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+</style>
+</head>
+<body>
+
+<div id="splash">
+  <div class="s-icon">⛰️</div>
+  <div class="s-title">TrailAlert</div>
+  <div class="s-sub">Maurienne · Live</div>
+  <div class="s-bar"><div class="s-fill"></div></div>
+</div>
+
+<div id="app">
+  <header>
+    <div class="logo">
+      <div class="logo-mark">⛰️</div>
+      <div>
+        <div class="logo-text">TrailAlert</div>
+        <div class="logo-zone">Vallée de la Maurienne</div>
+      </div>
+    </div>
+    <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+  </header>
+
+  <div id="content">
+    <!-- MAP -->
+    <div id="panel-map">
+      <div id="map"></div>
+
+      <div class="map-legend">
+        <div class="legend-item"><div class="legend-dot" style="background:#ff5a5a"></div>Critique</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#ffb347"></div>Modéré</div>
+        <div class="legend-item"><div class="legend-dot" style="background:#7fff5a"></div>Info</div>
+      </div>
+
+      <div class="mode-toggle">
+        <button class="mode-btn active" id="btn-rando" onclick="setMode('rando')">🥾</button>
+        <button class="mode-btn" id="btn-velo" onclick="setMode('velo')">🚴</button>
+        <button class="mode-btn" id="btn-vtm" onclick="setMode('vtm')">🏔️</button>
+      </div>
+
+      <div class="fab-label">Signaler</div>
+      <button id="fab" onclick="openReport()">＋</button>
+
+      <div class="stats-bar">
+        <div class="stat-item"><div class="stat-num" id="stat-active">7</div><div class="stat-label">Alertes actives</div></div>
+        <div class="stat-item"><div class="stat-num" id="stat-users">23</div><div class="stat-label">En ligne</div></div>
+        <div class="stat-item"><div class="stat-num">SJdM</div><div class="stat-label">Zone</div></div>
+      </div>
+    </div>
+
+    <!-- FEED -->
+    <div id="panel-feed">
+      <div class="feed-hdr">
+        <div class="feed-title">Fil des alertes</div>
+        <div class="feed-ct" id="feed-ct">7 alertes</div>
+      </div>
+      <div class="feed-list" id="feed-list"></div>
+    </div>
+
+    <!-- PROFILE -->
+    <div id="panel-profile">
+      <div class="p-hdr">
+        <div class="avatar">🧗</div>
+        <div class="p-name">Viking</div>
+        <div class="p-rank">🏅 Sentinelle de la Maurienne</div>
+      </div>
+      <div class="sg">
+        <div class="sc"><div class="n" id="p-count">14</div><div class="l">Signalements</div></div>
+        <div class="sc"><div class="n">89</div><div class="l">Votes utiles</div></div>
+        <div class="sc"><div class="n">97%</div><div class="l">Fiabilité</div></div>
+      </div>
+      <div class="st">Badges obtenus</div>
+      <div class="br">
+        <div class="ub">⛰️ Pionnier Maurienne</div>
+        <div class="ub">🌨️ Chasseur de névés</div>
+        <div class="ub">🚴 Cycliste alpin</div>
+        <div class="ub">⚡ 10 signalements</div>
+      </div>
+      <div class="div"></div>
+      <div class="st">Mes signalements</div>
+      <div id="my-reports"><div class="empty">Pas encore de signalements.<br>Sois le premier à alerter la communauté !</div></div>
+    </div>
+  </div>
+
+  <nav>
+    <button class="tab active" onclick="showPanel('map')">
+      <div class="tab-wrap"><span class="tab-icon">🗺️</span><span class="badge" id="map-badge">7</span></div>
+      Carte
+    </button>
+    <button class="tab" onclick="showPanel('feed')">
+      <span class="tab-icon">📡</span>Alertes
+    </button>
+    <button class="tab" onclick="showPanel('profile')">
+      <span class="tab-icon">👤</span>Profil
+    </button>
+  </nav>
+</div>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="modal-report">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">Signaler</div>
+      <button class="modal-close" onclick="closeReport()">✕</button>
+    </div>
+    <div class="modal-body">
+      <span class="input-label">Type d'alerte</span>
+      <div class="report-grid">
+        <div class="at" onclick="selectType(this,'❄️','Névé / Neige')"><div class="at-icon">❄️</div><div class="at-name">Névé / Neige</div><div class="at-desc">Passage enneigé</div></div>
+        <div class="at" onclick="selectType(this,'🪨','Éboulement')"><div class="at-icon">🪨</div><div class="at-name">Éboulement</div><div class="at-desc">Sentier bloqué</div></div>
+        <div class="at" onclick="selectType(this,'💧','Passage délicat')"><div class="at-icon">💧</div><div class="at-name">Passage délicat</div><div class="at-desc">Gué, boue profonde</div></div>
+        <div class="at" onclick="selectType(this,'🐄','Troupeau / Patou')"><div class="at-icon">🐄</div><div class="at-name">Troupeau / Patou</div><div class="at-desc">Chien agressif</div></div>
+        <div class="at" onclick="selectType(this,'🚧','Route fermée')"><div class="at-icon">🚧</div><div class="at-name">Route fermée</div><div class="at-desc">Travaux, éboulis</div></div>
+        <div class="at" onclick="selectType(this,'✅','Sentier OK')"><div class="at-icon">✅</div><div class="at-name">Sentier OK</div><div class="at-desc">Tout est bon</div></div>
+        <div class="at" onclick="selectType(this,'📵','Sans réseau')"><div class="at-icon">📵</div><div class="at-name">Sans réseau</div><div class="at-desc">Aucun signal</div></div>
+        <div class="at" onclick="selectType(this,'⚠️','Autre danger')"><div class="at-icon">⚠️</div><div class="at-name">Autre danger</div><div class="at-desc">Préciser en note</div></div>
+      </div>
+
+      <span class="input-label">Niveau de danger</span>
+      <div class="sev-row">
+        <button class="sev-btn sev-l" onclick="selectSev(this,'low')">🟢 Info</button>
+        <button class="sev-btn sev-m" onclick="selectSev(this,'med')">🟡 Modéré</button>
+        <button class="sev-btn sev-h" onclick="selectSev(this,'high')">🔴 Critique</button>
+      </div>
+
+      <span class="input-label">Lieu</span>
+      <select id="loc-sel" class="mb">
+        <option value="">Sélectionner un endroit...</option>
+        <option>Col du Télégraphe</option>
+        <option>Col du Galibier</option>
+        <option>Col de la Croix de Fer</option>
+        <option>Col du Mont Cenis</option>
+        <option>Col de la Madeleine</option>
+        <option>Sentier GR5 — Valloire</option>
+        <option>Sentier Aussois — Refuge</option>
+        <option>Bonneval-sur-Arc</option>
+        <option>Modane — Val d'Ambin</option>
+        <option>Saint-Jean-de-Maurienne</option>
+        <option>Lac du Mont Cenis</option>
+        <option>Valmeinier — sentier lac</option>
+        <option>Col d'Ornon</option>
+        <option>Sentier des Aiguilles d'Arves</option>
+      </select>
+
+      <span class="input-label">Note (optionnel)</span>
+      <textarea id="note-in" rows="2" placeholder="Ex : Névé sur 200m, crampons conseillés..." class="mb"></textarea>
+
+      <button class="btn-p" onclick="submitReport()">📍 Envoyer le signalement</button>
+      <button class="btn-s" onclick="closeReport()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD TRAIL MODAL -->
+<div class="modal-overlay" id="modal-trail">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-header">
+      <div class="modal-title">🗺️ Proposer un sentier</div>
+      <button class="modal-close" onclick="closeTrail()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="trail-info">
+        📌 Clique sur la carte pour poser des points et tracer un sentier inconnu ou non référencé. Les autres utilisateurs pourront le voter et le valider.
+      </div>
+      <span class="input-label">Nom du sentier</span>
+      <input type="text" id="trail-name" placeholder="Ex : Sentier des crêtes de Chaussy" class="mb" style="display:block;width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:var(--rs);color:var(--text);font-family:inherit;font-size:14px;padding:10px 12px;outline:none;margin-bottom:12px">
+      <span class="input-label">Type</span>
+      <select id="trail-type" class="mb">
+        <option>Randonnée pédestre</option>
+        <option>VTT / Bike</option>
+        <option>Trail running</option>
+        <option>Raquettes / hiver</option>
+        <option>Voie cyclable</option>
+      </select>
+      <span class="input-label">Difficulté</span>
+      <div class="sev-row" style="margin-bottom:14px">
+        <button class="sev-btn sev-l" onclick="selectDiff(this,'facile')">🟢 Facile</button>
+        <button class="sev-btn sev-m" onclick="selectDiff(this,'moyen')">🟡 Moyen</button>
+        <button class="sev-btn sev-h" onclick="selectDiff(this,'difficile')">🔴 Difficile</button>
+      </div>
+      <span class="input-label">Description</span>
+      <textarea id="trail-desc" rows="2" placeholder="Dénivelé, point de départ, durée estimée..." class="mb"></textarea>
+      <button class="btn-p" onclick="submitTrail()">✅ Proposer ce sentier</button>
+      <button class="btn-s" onclick="closeTrail()">Annuler</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const ALERTS=[
+  {id:1,icon:'❄️',type:'Névé / Neige',loc:'Col du Galibier',lat:45.064,lng:6.408,sev:'high',note:'Névé important côté nord ~400m. Piolet conseillé.',time:'23 min',votes:{ok:8,deny:1},mode:['rando','vtm']},
+  {id:2,icon:'🐄',type:'Troupeau / Patou',loc:'Aussois — Refuge',lat:45.212,lng:6.748,sev:'med',note:'Patou très agressif au 2ème alpage. Contourner par la droite.',time:'1h',votes:{ok:12,deny:0},mode:['rando']},
+  {id:3,icon:'🚧',type:'Route fermée',loc:'Col du Télégraphe',lat:45.200,lng:6.482,sev:'high',note:'Éboulis sur D902 à 2km du col. Gendarmerie sur place.',time:'2h',votes:{ok:19,deny:2},mode:['velo','vtm']},
+  {id:4,icon:'💧',type:'Passage délicat',loc:'GR5 — Valloire',lat:45.163,lng:6.430,sev:'med',note:'Ruisseau gonflé après orages, passage possible avec prudence.',time:'3h',votes:{ok:5,deny:1},mode:['rando']},
+  {id:5,icon:'✅',type:'Sentier OK',loc:'Croix de Fer',lat:45.223,lng:6.203,sev:'low',note:'Passage ce matin, tout est dégagé. Belle journée !',time:'4h',votes:{ok:7,deny:0},mode:['rando','velo']},
+  {id:6,icon:'📵',type:'Sans réseau',loc:'Lac du Mont Cenis',lat:45.256,lng:6.956,sev:'low',note:'Aucun réseau Orange ni SFR du lac jusqu\'au refuge.',time:'hier',votes:{ok:11,deny:0},mode:['rando']},
+  {id:7,icon:'🪨',type:'Éboulement',loc:"Modane — Val d'Ambin",lat:45.198,lng:6.682,sev:'high',note:'Gros éboulis côté ouest. Passage impossible.',time:'hier',votes:{ok:6,deny:1},mode:['rando','vtm']},
+];
+
+const TRAILS=[
+  {id:'t1',name:'Tour des Aiguilles d\'Arves',type:'Randonnée pédestre',diff:'difficile',color:'#7fff5a',desc:'2 jours, 3200m D+',points:[[45.18,6.35],[45.19,6.38],[45.21,6.42],[45.19,6.46]]},
+  {id:'t2',name:'Sentier du Lac Guichard',type:'Randonnée pédestre',diff:'moyen',color:'#5aafff',desc:'Départ Valmeinier, 3h AR',points:[[45.16,6.44],[45.17,6.47],[45.15,6.50]]},
+  {id:'t3',name:'Piste VTT Valloire Descente',type:'VTT / Bike',diff:'difficile',color:'#ff8c5a',desc:'Bike park Valloire, 800m D-',points:[[45.17,6.43],[45.16,6.42],[45.155,6.41]]},
+];
+
+let map,currentMode='rando',markers=[],trailLayers=[],selType=null,selSev=null,selDiff=null;
+let myReports=[],allAlerts=[...ALERTS];
+let addingTrail=false,trailPoints=[],trailPolyline=null;
+
+function sevColor(s){return s==='high'?'#ff5a5a':s==='med'?'#ffb347':'#7fff5a'}
+
+function mkIcon(a){
+  const c=sevColor(a.sev);
+  return L.divIcon({
+    className:'',
+    html:`<div style="width:40px;height:40px;border-radius:50%;background:#131f12;border:2.5px solid ${c};display:flex;align-items:center;justify-content:center;font-size:18px;box-shadow:0 0 10px ${c}44;cursor:pointer">${a.icon}</div>`,
+    iconSize:[40,40],iconAnchor:[20,20],popupAnchor:[0,-22]
+  });
+}
+
+function popupHTML(a){
+  return `<div class="popup-inner">
+    <span class="pu-icon">${a.icon}</span>
+    <div class="pu-type">${a.type}</div>
+    <div class="pu-note">${a.note||''}</div>
+    <div class="pu-foot"><span>📍 ${a.loc}</span><span>🕐 il y a ${a.time}</span></div>
+    <div class="pu-actions">
+      <button class="pu-vote ok" onclick="votePopup(${a.id},'ok')">✓ ${a.votes.ok}</button>
+      <button class="pu-vote no" onclick="votePopup(${a.id},'deny')">✗ ${a.votes.deny}</button>
+    </div>
+  </div>`;
+}
+
+function initMap(){
+  map=L.map('map',{center:[45.18,6.55],zoom:11,zoomControl:false});
+  L.control.zoom({position:'bottomright'}).addTo(map);
+
+  // Fond topo/sentiers OpenStreetMap
+  L.tileLayer('https://tile.opentopomap.org/{z}/{x}/{y}.png',{
+    maxZoom:17,
+    attribution:'OpenTopoMap'
+  }).addTo(map);
+
+  renderMarkers();
+  renderTrails();
+}
+
+function renderMarkers(){
+  markers.forEach(m=>m.remove());markers=[];
+  allAlerts.filter(a=>a.mode.includes(currentMode)).forEach(a=>{
+    const m=L.marker([a.lat,a.lng],{icon:mkIcon(a)})
+      .bindPopup(popupHTML(a),{maxWidth:260,minWidth:220,closeButton:true})
+      .addTo(map);
+    markers.push(m);
+  });
+}
+
+function renderTrails(){
+  trailLayers.forEach(l=>l.remove());trailLayers=[];
+  TRAILS.forEach(t=>{
+    const l=L.polyline(t.points,{
+      color:t.color,weight:4,opacity:.85,
+      dashArray: t.type==='VTT / Bike'?'8,4':null
+    }).addTo(map);
+    l.bindPopup(`<div class="popup-inner"><div class="pu-type">${t.name}</div><div class="pu-note">${t.type} · ${t.diff}<br>${t.desc}</div></div>`,{closeButton:true});
+    trailLayers.push(l);
+  });
+}
+
+function votePopup(id,type){
+  const a=allAlerts.find(x=>x.id===id);
+  if(!a)return;
+  if(type==='ok')a.votes.ok++;else a.votes.deny++;
+  map.closePopup();
+  renderMarkers();
+  renderFeed();
+  showToast(type==='ok'?'👍 Confirmation enregistrée':'👎 Vote enregistré');
+}
+
+function setMode(m){
+  currentMode=m;
+  document.querySelectorAll('.mode-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-'+m).classList.add('active');
+  renderMarkers();
+  const cnt=allAlerts.filter(a=>a.mode.includes(m)).length;
+  document.getElementById('stat-active').textContent=cnt;
+  document.getElementById('map-badge').textContent=cnt;
+}
+
+// FEED
+function renderFeed(){
+  const list=document.getElementById('feed-list');
+  list.innerHTML=[...allAlerts].reverse().map(a=>`
+    <div class="ac sev-${a.sev}">
+      <div class="ac-top"><div class="ac-icon">${a.icon}</div><div class="ac-meta"><div class="ac-type">${a.type}</div><div class="ac-loc">📍 ${a.loc}</div></div><div class="ac-time">il y a ${a.time}</div></div>
+      ${a.note?`<div class="ac-note">${a.note}</div>`:''}
+      <div class="ac-acts">
+        <button class="vbtn ok" onclick="vote(${a.id},'ok')">✓ ${a.votes.ok}</button>
+        <button class="vbtn no" onclick="vote(${a.id},'deny')">✗ ${a.votes.deny}</button>
+        ${a.id>100?'<span class="mine-tag">🙋 Moi</span>':''}
+      </div>
+    </div>`).join('');
+  document.getElementById('feed-ct').textContent=allAlerts.length+' alertes';
+}
+
+function vote(id,type){
+  const a=allAlerts.find(x=>x.id===id);
+  if(!a)return;
+  if(type==='ok')a.votes.ok++;else a.votes.deny++;
+  renderFeed();
+  showToast(type==='ok'?'👍 Merci !':'👎 Vote enregistré');
+}
+
+// REPORT
+function openReport(){
+  document.getElementById('modal-report').classList.add('open');
+  selType=null;selSev=null;
+  document.querySelectorAll('.at').forEach(e=>e.classList.remove('sel'));
+  document.querySelectorAll('.sev-btn').forEach(e=>e.classList.remove('active'));
+  document.getElementById('note-in').value='';
+  document.getElementById('loc-sel').value='';
+}
+function closeReport(){document.getElementById('modal-report').classList.remove('open')}
+function selectType(el,icon,name){document.querySelectorAll('.at').forEach(e=>e.classList.remove('sel'));el.classList.add('sel');selType={icon,name}}
+function selectSev(btn,sev){document.querySelectorAll('.sev-btn').forEach(e=>e.classList.remove('active'));btn.classList.add('active');selSev=sev}
+
+function submitReport(){
+  if(!selType){showToast("⚠️ Choisis un type d'alerte");return}
+  const loc=document.getElementById('loc-sel').value;
+  if(!loc){showToast('⚠️ Choisis un lieu');return}
+  const note=document.getElementById('note-in').value;
+  const sev=selSev||'low';
+  const center=map.getCenter();
+  const na={
+    id:200+myReports.length,icon:selType.icon,type:selType.name,
+    loc,lat:center.lat+(Math.random()-.5)*.02,lng:center.lng+(Math.random()-.5)*.03,
+    sev,note,time:'instant',votes:{ok:0,deny:0},mode:['rando','velo','vtm']
+  };
+  myReports.push(na);allAlerts.push(na);
+  const cnt=allAlerts.length;
+  document.getElementById('stat-active').textContent=cnt;
+  document.getElementById('map-badge').textContent=cnt;
+  document.getElementById('p-count').textContent=14+myReports.length;
+  renderMarkers();renderFeed();renderMyReports();
+  closeReport();
+  showToast('📍 Signalement envoyé à la communauté !');
+}
+
+// TRAIL
+function openTrail(){document.getElementById('modal-trail').classList.add('open');selDiff=null;document.querySelectorAll('#modal-trail .sev-btn').forEach(e=>e.classList.remove('active'))}
+function closeTrail(){document.getElementById('modal-trail').classList.remove('open')}
+function selectDiff(btn,d){document.querySelectorAll('#modal-trail .sev-btn').forEach(e=>e.classList.remove('active'));btn.classList.add('active');selDiff=d}
+
+function submitTrail(){
+  const name=document.getElementById('trail-name').value.trim();
+  const type=document.getElementById('trail-type').value;
+  const desc=document.getElementById('trail-desc').value;
+  if(!name){showToast('⚠️ Donne un nom au sentier');return}
+  const colors={'Randonnée pédestre':'#7fff5a','VTT / Bike':'#ff8c5a','Trail running':'#ff5aaa','Raquettes / hiver':'#c8e8ff','Voie cyclable':'#5ab4ff'};
+  const c=map.getCenter();
+  TRAILS.push({id:'t'+(TRAILS.length+1),name,type,diff:selDiff||'moyen',color:colors[type]||'#7fff5a',desc,
+    points:[[c.lat-.02,c.lng-.02],[c.lat,c.lng+.02],[c.lat+.02,c.lng]]});
+  renderTrails();closeTrail();
+  showToast('🗺️ Sentier proposé à la communauté !');
+}
+
+// PROFILE
+function renderMyReports(){
+  const el=document.getElementById('my-reports');
+  if(!myReports.length){el.innerHTML='<div class="empty">Pas encore de signalements.<br>Sois le premier à alerter !</div>';return}
+  el.innerHTML=myReports.map(a=>`<div class="ac sev-${a.sev}" style="margin-bottom:8px"><div class="ac-top"><div class="ac-icon">${a.icon}</div><div class="ac-meta"><div class="ac-type">${a.type}</div><div class="ac-loc">📍 ${a.loc}</div></div><div class="ac-time">À l'instant</div></div></div>`).join('');
+}
+
+// PANELS
+function showPanel(p){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['map','feed','profile'][i]===p));
+  document.getElementById('panel-map').classList.toggle('hidden',p!=='map');
+  const pf=document.getElementById('panel-feed');
+  pf.style.display=p==='feed'?'flex':'none';pf.classList.toggle('active',p==='feed');
+  const pp=document.getElementById('panel-profile');
+  pp.style.display=p==='profile'?'block':'none';pp.classList.toggle('active',p==='profile');
+  if(p==='map')setTimeout(()=>map&&map.invalidateSize(),60);
+}
+
+// TOAST
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2500)}
+
+// LIVE SIM
+setInterval(()=>{const el=document.getElementById('stat-users');el.textContent=Math.max(10,Math.min(50,parseInt(el.textContent)+(Math.random()>.5?1:-1)))},4000);
+
+// INIT
+window.addEventListener('load',()=>{
+  initMap();renderFeed();renderMyReports();
+  setTimeout(()=>document.getElementById('splash').classList.add('hide'),2200);
+});
+</script>
+</body>
+</html>
